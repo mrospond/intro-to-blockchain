@@ -26,7 +26,8 @@ class Node:
         TODO: Przypisz wartości polom owner oraz blockchain przy pomocy podanych argumentów.
             Wykorzystaj `initial_transaction` do stworzenia blockchain.
         """
-        raise NotImplementedError()
+        # raise NotImplementedError()
+        
 
     def validate_transaction(self, transaction: Transaction) -> bool:
         """
