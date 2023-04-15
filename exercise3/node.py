@@ -27,7 +27,8 @@ class Node:
             Wykorzystaj `initial_transaction` do stworzenia blockchain.
         """
         # raise NotImplementedError()
-        
+        self.owner = owner_public_key
+        self.blockchain = Blockchain(initial_transaction)
 
     def validate_transaction(self, transaction: Transaction) -> bool:
         """
@@ -48,7 +49,27 @@ class Node:
         !! Ważne !!
         Transakcja, którą chcemy wydać oznacza transakcję poprzednią do tej podanej w argumencie `transaction`.
         """
-        raise NotImplementedError()
+        # raise NotImplementedError()
+        if transaction.signature is None:
+            return False
+
+        prev_transaction = self.blockchain.get_tx_by_hash(
+            tx_hash=transaction.previous_tx_hash
+        )
+        if prev_transaction is None:
+            return False
+
+        if (
+            self.blockchain.get_tx_by_previous_tx_hash(
+                previous_tx_hash=prev_transaction.hash
+            ) 
+            is not None
+        ):
+            return False
+
+        return verify_signature(
+            prev_transaction.recipient, transaction.signature, transaction.hash
+        )
 
     def _max_int_shifted_by_difficulty(self):
         """
@@ -67,7 +88,12 @@ class Node:
         - int.from_bytes(hash, "big")
         - self._max_int_shifted_by_difficulty()
         """
-        raise NotImplementedError()
+        # raise NotImplementedError()
+        while (
+            int.from_bytes(block.hash(), "big") > self._max_int_shifted_by_difficulty()
+        ):
+            block.nonce += 1
+        return block
 
     def add_transaction(self, transaction: Transaction):
         """
@@ -78,7 +104,21 @@ class Node:
             Znajdź nonce, który spełni kryteria sieci (użyj metody `generate_nonce`).
             Dodaj blok na koniec łańcucha.
         """
-        raise NotImplementedError()
+        # raise NotImplementedError()
+        if not self.validate_transaction(transaction):
+            raise Exception("Transaction can't be added. Verification failed.")
+
+        new_coin_transaction = Transaction(
+            recipient=self.owner, previous_tx_hash=b"\x00"
+        )
+        new_block = Block(
+            prev_block_hash=self.blockchain.get_latest_block().hash(),
+            nonce=0,
+            transactions=[transaction, new_coin_transaction],
+        )
+
+        new_block = self.generate_nonce(new_block)
+        self.blockchain.blocks.append(new_block)
 
     def get_state(self) -> Blockchain:
         """
@@ -101,4 +141,33 @@ def validate_chain(chain: Blockchain) -> bool:
 
         Podpowiedź: Dla ułatwienia możesz skonstruować nowego node'a, na bieżąco weryfikując jego poprawność.
     """
-    raise NotImplementedError()
+    # raise NotImplementedError()
+    if len(chain.blocks[0].transactions) != 1:
+        return False
+
+    honest_node = Node(generate_key_pair()[0], chain.blocks[0].transactions[0])
+
+    for index, block in enumerate(chain.blocks[1:]):
+        if block.prev_block_hash != chain.blocks[index].hash():
+            return False
+
+        if block.timestamp < chain.blocks[index].timestamp:
+            return False
+
+        if int.from_bytes(block.hash(), "big") > MAX_256_INT >> DIFFICULTY:
+            return False
+
+        new_coin_transaction_used = False
+        for transaction in block.transactions:
+            if transaction.previous_tx_hash == b"\00":
+                if new_coin_transaction_used:
+                    return False
+                new_coin_transaction_used = True
+                continue
+
+            if not honest_node.validate_transaction(transaction):
+                return False
+
+        honest_node.blockchain.blocks.append(block)
+
+    return True
